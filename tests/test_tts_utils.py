@@ -45,13 +45,22 @@ class TestSplitText:
         assert "".join(chunks) == "х" * 700
         assert all(len(c) <= 100 for c in chunks)
 
-    def test_russian_brief_fits_in_a_few_chunks(self):
-        brief = Path("/root/KirillVault/voice/_reference_text.txt")
-        text = brief.read_text(encoding="utf-8").strip() if brief.exists() else (
-            "Доброе утро. Сегодня пятница. " * 6)
+    def test_brief_sized_text_fits_in_a_few_chunks(self):
+        # ~1000 chars is the size of the morning brief (~35 s of speech). The
+        # real brief file is not readable from a CI runner, so the shape is
+        # reproduced here with lorem-style Russian sentences.
+        sentence = "Сегодня в Москве облачно и небольшой дождь. "
+        text = (sentence * 24).strip()  # ~1080 chars, 24 sentences
         chunks = split_text(text, MAX_CHUNK_CHARS)
-        assert 1 <= len(chunks) <= 12
+        assert 3 <= len(chunks) <= 10
         assert all(len(c) <= MAX_CHUNK_CHARS for c in chunks)
+        assert "".join(chunks).replace(" ", "") == text.replace(" ", "")
+
+    def test_no_chunk_can_exceed_the_decoder_budget(self):
+        # 240 chars ~ 14 s of speech; the decoder stops at ~40 s per call.
+        for size in (60, 120, 240, 900):
+            chunks = split_text("слово " * 400, max_chars=size)
+            assert all(len(c) <= size for c in chunks)
 
     def test_empty_input(self):
         assert split_text("") == []
