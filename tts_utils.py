@@ -5,6 +5,7 @@ runs on a laptop, in CI, and on the VPS without a GPU.
 """
 import base64
 import binascii
+import inspect
 import json
 import re
 import subprocess
@@ -105,6 +106,55 @@ def _hard_split(sentence, max_chars):
     if current:
         out.append(current)
     return [c for c in out if c]
+
+
+def t3_model_kwarg_supported(from_local):
+    """Does this chatterbox build take a ``t3_model`` argument?
+
+    PyPI ``chatterbox-tts`` 0.1.7 hardcodes ``t3_mtl23ls_v2.safetensors`` and its
+    ``from_local(ckpt_dir, device)`` rejects a ``t3_model`` keyword — the first
+    job on the deployed endpoint really died with
+    ``TypeError: from_local() got an unexpected keyword argument 't3_model'``.
+    Git master accepts it, so both shapes are supported.
+    """
+    try:
+        return "t3_model" in inspect.signature(from_local).parameters
+    except (TypeError, ValueError):  # builtins / C-level callables
+        return False
+
+
+#: Short names accepted by the model library -> checkpoint file in the HF repo.
+T3_MODEL_FILES = {
+    "v2": "t3_mtl23ls_v2.safetensors",
+    "t3_mtl23ls_v2": "t3_mtl23ls_v2.safetensors",
+    "v3": "t3_mtl23ls_v3.safetensors",
+    "t3_mtl23ls_v3": "t3_mtl23ls_v3.safetensors",
+}
+DEFAULT_T3_FILE = "t3_mtl23ls_v2.safetensors"
+
+
+def resolve_t3_model_file(requested):
+    """Map ``v3``/``t3_mtl23ls_v3``/``foo.safetensors`` to a real repo filename."""
+    if not requested:
+        return DEFAULT_T3_FILE
+    requested = str(requested).strip()
+    if requested.endswith(".safetensors"):
+        return requested
+    return T3_MODEL_FILES.get(requested, DEFAULT_T3_FILE)
+
+
+def effective_t3_model(requested, from_local):
+    """The checkpoint **filename** that will actually be loaded.
+
+    Two things have to agree: what gets downloaded and what the library loads.
+    A build that cannot select a T3 variant always loads v2, so the download has
+    to follow the library instead of the request — otherwise a 0.1.7 worker
+    fetches v3 and then looks for a missing v2.
+    """
+    file_name = resolve_t3_model_file(requested)
+    if from_local is None or t3_model_kwarg_supported(from_local):
+        return file_name
+    return DEFAULT_T3_FILE
 
 
 def parse_reference(value):

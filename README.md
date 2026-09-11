@@ -91,6 +91,25 @@ GPU actually allocated. Nothing has to be inferred from logs.
 | `DEFAULT_FORMAT` | `mp3` | `mp3` or `wav` |
 | `FALLBACK_HF_HOME` | `/tmp/hf-home` | used when no host cache is mounted |
 
+## Pitfalls found in production
+
+* **PyPI `chatterbox-tts` 0.1.7 cannot select a T3 checkpoint.** Its
+  `ChatterboxMultilingualTTS.from_local(ckpt_dir, device)` takes no `t3_model`
+  argument and always loads `t3_mtl23ls_v2.safetensors` (git master accepts
+  `t3_model`). The first real job on the deployed endpoint died with
+  `TypeError: from_local() got an unexpected keyword argument 't3_model'`.
+  `tts_utils.effective_t3_model()` now resolves the filename **the installed
+  build will actually open** and the download follows it, so
+  `CHATTERBOX_T3_MODEL=v3` degrades to v2 instead of fetching 2 GB the library
+  will not load.
+* **The decoder emits at most 1000 speech tokens per `generate` call** (~40 s of
+  audio at 25 tokens/s), so long text is split on sentences; without that the
+  tail of a brief is dropped silently.
+* **A cloning request overwrites the model's speaker.** `model.conds` is
+  restored from the repo's `conds.pt` before every job that passes no
+  `reference_audio`, otherwise a later request inherits the previous caller's
+  voice.
+
 ## Tests
 
 ```bash

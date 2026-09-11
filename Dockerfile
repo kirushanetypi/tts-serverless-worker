@@ -25,7 +25,7 @@ WORKDIR /app
 COPY requirements.txt /app/requirements.txt
 RUN python3 -m pip install --upgrade pip setuptools wheel \
     && python3 -m pip install -r /app/requirements.txt \
-    && python3 -c "import torch, torchaudio, chatterbox.mtl_tts; print('torch', torch.__version__, 'torchaudio', torchaudio.__version__)"
+    && python3 -c "import torch, torchaudio, inspect, chatterbox.mtl_tts as m; print('torch', torch.__version__, 'torchaudio', torchaudio.__version__); print('from_local signature:', inspect.signature(m.ChatterboxMultilingualTTS.from_local))"
 
 COPY model_store.py tts_utils.py handler.py /app/
 

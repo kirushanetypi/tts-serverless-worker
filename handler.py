@@ -33,6 +33,7 @@ import time
 import numpy as np
 import runpod
 import torch
+from chatterbox.mtl_tts import ChatterboxMultilingualTTS
 
 from model_store import ensure_model, resolve_hf_home
 from tts_utils import (
@@ -40,11 +41,13 @@ from tts_utils import (
     SUPPORTED_LANGUAGES,
     clamp_float,
     clamp_int,
+    effective_t3_model,
     encode_mp3,
     parse_reference,
     probe_duration,
     reference_suffix,
     split_text,
+    t3_model_kwarg_supported,
     write_wav,
 )
 
@@ -99,16 +102,19 @@ def load_model(t3_model):
         entry["reused"] = True
         return entry
 
-    from chatterbox.mtl_tts import ChatterboxMultilingualTTS
-
-    info = ensure_model(t3_model, repo_id=REPO_ID, allow_download=ALLOW_MODEL_DOWNLOAD)
+    load_t3 = effective_t3_model(t3_model, ChatterboxMultilingualTTS.from_local)
+    info = ensure_model(load_t3, repo_id=REPO_ID, allow_download=ALLOW_MODEL_DOWNLOAD)
     if info.get("error"):
-        raise RuntimeError("checkpoint %s: %s" % (t3_model, info["error"]))
+        raise RuntimeError("checkpoint %s: %s" % (load_t3, info["error"]))
 
-    log.info("loading model from %s (cached=%s download=%ss)",
-             info["path"], info["cached"], info["download_seconds"])
+    log.info("loading model from %s (cached=%s download=%ss, requested t3=%s -> %s)",
+             info["path"], info["cached"], info["download_seconds"], t3_model, load_t3)
     started = _now()
-    model = ChatterboxMultilingualTTS.from_local(info["path"], device="cuda", t3_model=t3_model)
+    if t3_model_kwarg_supported(ChatterboxMultilingualTTS.from_local):
+        model = ChatterboxMultilingualTTS.from_local(info["path"], device="cuda",
+                                                     t3_model=load_t3)
+    else:
+        model = ChatterboxMultilingualTTS.from_local(info["path"], device="cuda")
     load_seconds = round(_now() - started, 2)
 
     if not ENABLE_WATERMARK:

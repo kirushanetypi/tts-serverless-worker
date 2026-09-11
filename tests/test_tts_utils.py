@@ -9,15 +9,20 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from tts_utils import (  # noqa: E402
+    DEFAULT_T3_FILE,
     MAX_CHUNK_CHARS,
+    T3_MODEL_FILES,
     clamp_float,
     clamp_int,
+    effective_t3_model,
     encode_mp3,
     parse_reference,
     probe_duration,
     read_wav_bytes,
     reference_suffix,
+    resolve_t3_model_file,
     split_text,
+    t3_model_kwarg_supported,
     write_wav,
 )
 
@@ -109,6 +114,52 @@ class TestReference:
         assert reference_suffix(None, b"\xff\xfb\x90") == ".mp3"
         assert reference_suffix("audio/flac", b"zzz") == ".flac"
         assert reference_suffix(None, b"\x00\x01") == ".audio"
+
+
+class TestT3ModelResolution:
+    """Regression guard for the first production failure on the deployed endpoint.
+
+    The live job died with
+    ``TypeError: ChatterboxMultilingualTTS.from_local() got an unexpected
+    keyword argument 't3_model'`` because PyPI chatterbox-tts 0.1.7 has no
+    ``t3_model`` parameter and hardcodes the v2 checkpoint.
+    """
+
+    @staticmethod
+    def _local_v2(ckpt_dir, device):  # what 0.1.7 ships
+        return None
+
+    @staticmethod
+    def _local_master(ckpt_dir, device, t3_model=None):  # what git master ships
+        return None
+
+    def test_short_names_map_to_repo_filenames(self):
+        assert resolve_t3_model_file("v2") == "t3_mtl23ls_v2.safetensors"
+        assert resolve_t3_model_file("v3") == "t3_mtl23ls_v3.safetensors"
+        assert resolve_t3_model_file("t3_mtl23ls_v3") == "t3_mtl23ls_v3.safetensors"
+        assert resolve_t3_model_file("custom.safetensors") == "custom.safetensors"
+        assert resolve_t3_model_file("") == DEFAULT_T3_FILE
+        assert resolve_t3_model_file("nonsense") == DEFAULT_T3_FILE
+
+    def test_v2_only_build_always_loads_v2(self):
+        assert effective_t3_model("v3", self._local_v2) == DEFAULT_T3_FILE
+        assert effective_t3_model("v2", self._local_v2) == DEFAULT_T3_FILE
+
+    def test_selectable_build_honours_the_request(self):
+        assert effective_t3_model("v3", self._local_master) == "t3_mtl23ls_v3.safetensors"
+        assert effective_t3_model("v2", self._local_master) == DEFAULT_T3_FILE
+
+    def test_signature_detection(self):
+        assert t3_model_kwarg_supported(self._local_master) is True
+        assert t3_model_kwarg_supported(self._local_v2) is False
+        assert t3_model_kwarg_supported(None) is False  # never raises
+
+    def test_download_and_load_agree_for_both_builds(self):
+        # the downloaded file must be the one the library will open
+        for from_local in (self._local_v2, self._local_master):
+            for requested in ("v2", "v3"):
+                chosen = effective_t3_model(requested, from_local)
+                assert chosen in set(T3_MODEL_FILES.values())
 
 
 class TestAudioIo:
