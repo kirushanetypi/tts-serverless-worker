@@ -1,0 +1,12 @@
+{
+  "_comment": "Smoke input for the Chatterbox Multilingual TTS worker. POST to /v2/<endpoint>/run with {\"input\": <this object>}.",
+  "input": {
+    "text": "Доброе утро, Кирилл. Сегодня пятница, одиннадцатое сентября. Смена в парке с десяти утра до десяти вечера.",
+    "language_id": "ru",
+    "t3_model": "v3",
+    "format": "mp3",
+    "seed": 20260911,
+    "exaggeration": 0.5,
+    "cfg_weight": 0.5
+  }
+}

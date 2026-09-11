@@ -1,0 +1,8 @@
+# RunPod handler SDK (same pin as the other workers in this project).
+runpod==1.9.1
+
+# Chatterbox Multilingual TTS (Resemble AI, MIT). 0.1.7 ships
+# src/chatterbox/mtl_tts.py (23 languages incl. Russian) and pins
+# torch==2.6.0 / torchaudio==2.6.0, which the base image already provides.
+# Resolved from PyPI: the pinned version depends on resemble-perth>=1.0.0.
+chatterbox-tts==0.1.7
