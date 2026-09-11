@@ -22,10 +22,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-COPY requirements.txt /app/requirements.txt
+COPY requirements.txt patch_perth.py /app/
 RUN python3 -m pip install --upgrade pip setuptools wheel \
     && python3 -m pip install -r /app/requirements.txt \
     && python3 -c "import torch, torchaudio, inspect, chatterbox.mtl_tts as m; print('torch', torch.__version__, 'torchaudio', torchaudio.__version__); print('from_local signature:', inspect.signature(m.ChatterboxMultilingualTTS.from_local))"
+
+# resemble-perth 1.0.1 imports pkg_resources, which setuptools>=82 removed; the
+# bare `except ImportError` in perth/__init__.py then leaves
+# PerthImplicitWatermarker = None and chatterbox fails at model construction with
+# "TypeError: 'NoneType' object is not callable" — after the 3 GB checkpoints have
+# already been downloaded. Patch it right after the install (so the Docker layer
+# cache cannot keep a stale copy) and prove both the class and its bundled
+# checkpoint really load: a silent breakage must fail the build, not the job.
+RUN python3 /app/patch_perth.py --verify \
+    && python3 -c "import perth; w = perth.PerthImplicitWatermarker(); print('perth watermarker construct OK:', type(w).__name__)" \
+    && python3 -c "import chatterbox.mtl_tts; print('chatterbox.mtl_tts import OK')"
 
 COPY model_store.py tts_utils.py handler.py /app/
 

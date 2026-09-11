@@ -109,11 +109,25 @@ GPU actually allocated. Nothing has to be inferred from logs.
   restored from the repo's `conds.pt` before every job that passes no
   `reference_audio`, otherwise a later request inherits the previous caller's
   voice.
+* **`resemble-perth` 1.0.1 died on setuptools >= 82.** It does
+  `from pkg_resources import resource_filename` in
+  `perth/perth_net/__init__.py`, and setuptools 82 removed `pkg_resources`
+  (pypa/setuptools#5174). Its own `perth/__init__.py` catches the `ImportError`
+  and silently sets `PerthImplicitWatermarker = None`, so chatterbox failed at
+  `ChatterboxMultilingualTTS.__init__` with the opaque
+  `TypeError: 'NoneType' object is not callable` — *after* downloading and
+  loading the 3 GB checkpoints (RunPod job `2b6fb1ee`, delayTime 211.7 s).
+  `patch_perth.py` rewrites that import into a stdlib `importlib.util` shim and
+  the Dockerfile runs it with `--verify` right after the install, asserting both
+  the class and its bundled 36 MB checkpoint load. A `setuptools<82` pin stays in
+  `requirements.txt` as a second line of defence. Any *other* `pkg_resources`
+  reference inside the package makes `patch_perth.py` exit 2, so a half-patched
+  image fails the build instead of the job.
 
 ## Tests
 
 ```bash
-python -m pytest tests -q     # 15 offline tests: chunking, base64/ref parsing, wav/mp3 I/O
+python -m pytest tests -q     # 26 offline tests: chunking, base64/ref parsing, wav/mp3 I/O, perth patch
 ```
 
 CI runs them in a separate job before the image build.

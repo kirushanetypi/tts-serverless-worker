@@ -6,3 +6,12 @@ runpod==1.9.1
 # torch==2.6.0 / torchaudio==2.6.0, which the base image already provides.
 # Resolved from PyPI: the pinned version depends on resemble-perth>=1.0.0.
 chatterbox-tts==0.1.7
+
+# setuptools<82 belt-and-braces. resemble-perth 1.0.1 imports pkg_resources in
+# perth/perth_net/__init__.py, and setuptools 82 removed that module
+# (pypa/setuptools#5174, Feb 2026). perth swallows the ImportError and leaves
+# PerthImplicitWatermarker = None, which makes chatterbox die with
+# "TypeError: 'NoneType' object is not callable".
+# The durable fix is patch_perth.py (run by the Dockerfile); this pin keeps any
+# other transitive user of pkg_resources working too.
+setuptools<82
